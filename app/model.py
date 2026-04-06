@@ -1,29 +1,32 @@
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForVision2Seq
 from PIL import Image
+import torch
 
 
-class AnalyzeModel:
+class AnalyzerModel:
     def __init__(self):
-        # BLIP captioning model
-        self.blip_processor = BlipProcessor.from_pretrained(
-            "Salesforce/blip-image-captioning-base"
-        )
-        self.blip_model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base"
+        self.device = "cuda"
+
+        self.processor = AutoProcessor.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct"  # fallback if 35B too heavy
         )
 
-    def caption_image(self, pil_image: Image.Image, conditional_text: str = "") -> str:
-        # Conditional caption
-        inputs = self.blip_processor(
-            pil_image, conditional_text, return_tensors="pt"
+        self.model = AutoModelForVision2Seq.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            torch_dtype=torch.float16,
+            device_map="auto"
         )
 
-        out = self.blip_model.generate(**inputs)
-        conditional_caption = self.blip_processor.decode(
-            out[0], skip_special_tokens=True
-        )
+    def analyse(self, image: Image.Image, prompt: str):
+        inputs = self.processor(
+            text=prompt,
+            images=image,
+            return_tensors="pt"
+        ).to(self.device)
 
-        return conditional_caption
+        output = self.model.generate(**inputs, max_new_tokens=300)
 
-# Singleton
-analyze_model = AnalyzeModel()
+        return self.processor.decode(output[0], skip_special_tokens=True)
+
+
+analyzer_model = AnalyzerModel()

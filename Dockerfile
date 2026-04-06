@@ -1,12 +1,9 @@
-FROM python:3.11-slim
-
-ENV PYTHONUNBUFFERED=1
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# System deps (needed for PIL / torch)
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    python3-pip \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -15,11 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-# 🔥 Pre-download BLIP model during build
-RUN python -c "from transformers import BlipProcessor, BlipForConditionalGeneration; \
-BlipProcessor.from_pretrained('Salesforce/blip-image-captioning-base'); \
-BlipForConditionalGeneration.from_pretrained('Salesforce/blip-image-captioning-base')"
+# Preload model
+RUN python -c "from transformers import AutoProcessor; \
+AutoProcessor.from_pretrained('Qwen/Qwen2.5-VL-7B-Instruct')"
 
-EXPOSE 8234
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8234"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

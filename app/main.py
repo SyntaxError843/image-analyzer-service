@@ -5,13 +5,13 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-from app.model import analyze_model
+from app.model import analyzer_model
     
 app = FastAPI()
 
-class AnalyseImageRequest(BaseModel):
+class AnalyseRequest(BaseModel):
     image_urls: List[HttpUrl]
-    conditional_text: str = ''
+    instructions: str = ''
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
@@ -40,21 +40,20 @@ async def health_check():
     return {"status": "ok"}
 
 @app.post("/analyse-image")
-def analyse_image(request: AnalyseImageRequest):
-    if not request.image_urls:
-        raise HTTPException(status_code=400, detail="No image URLs provided")
-
+def analyse(request: AnalyseRequest):
     results = []
 
     for url in request.image_urls:
         try:
             image = download_image(str(url))
 
-            captions = analyze_model.caption_image(image, request.conditional_text)
+            prompt = request.instructions or "analyze the image and describe its content in detail"
+
+            output = analyzer_model.analyse(image, prompt)
 
             results.append({
                 "url": url,
-                "captions": captions
+                "raw_output": output
             })
 
         except Exception as e:
@@ -63,7 +62,4 @@ def analyse_image(request: AnalyseImageRequest):
                 "error": str(e)
             })
 
-    return {
-        "model": "Salesforce/blip-image-captioning-base",
-        "results": results
-    }
+    return {"results": results}
