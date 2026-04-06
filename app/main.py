@@ -11,6 +11,7 @@ app = FastAPI()
 
 class AnalyseImageRequest(BaseModel):
     image_urls: List[HttpUrl]
+    conditional_text: str = ''
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
@@ -49,7 +50,7 @@ def analyse_image(request: AnalyseImageRequest):
         try:
             image = download_image(str(url))
 
-            captions = analyze_model.caption_image(image)
+            captions = analyze_model.caption_image(image, request.conditional_text)
 
             results.append({
                 "url": url,
