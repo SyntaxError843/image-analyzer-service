@@ -1,39 +1,24 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
-from typing import List
-import requests
-from PIL import Image
-from io import BytesIO
+import logging
 
-from app.model import analyzer_model
+from vllm import LLM, SamplingParams
     
 app = FastAPI()
+logger = logging.getLogger("uvicorn")
+
+extraction_llm = LLM(
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
+    dtype="bfloat16",
+    max_model_len=16384,
+    enable_prefix_caching=True,
+    gpu_memory_utilization=0.23,
+)
+logger.info("Qwen2.5 VL model loaded successfully")
 
 class AnalyseRequest(BaseModel):
-    image_urls: List[HttpUrl]
+    image_url: HttpUrl
     instructions: str = ''
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "image/*,*/*;q=0.8",
-}
-
-def download_image(url: str) -> Image.Image:
-    response = requests.get(url, headers=HEADERS, timeout=10, stream=True)
-
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to download image: {url}"
-        )
-
-    try:
-        return Image.open(BytesIO(response.content)).convert("RGB")
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image format: {url}"
-        )
 
 @app.get("/health")
 async def health_check():
@@ -41,25 +26,35 @@ async def health_check():
 
 @app.post("/analyse-image")
 def analyse(request: AnalyseRequest):
-    results = []
+    try:
+        if not request.image_url:
+            raise HTTPException(
+                status_code=400,
+                detail=f"no image provided"
+            )
+        
+        prompt = request.instructions or "analyze the image and describe its content in detail"
 
-    for url in request.image_urls:
-        try:
-            image = download_image(str(url))
+        outputs = extraction_llm.generate(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": request.image_url},
+                        {"type": "text", "text": prompt}
+                    ]
+                }
+            ],
+            SamplingParams(temperature=0.0, max_tokens=2048),
+        )
 
-            prompt = request.instructions or "analyze the image and describe its content in detail"
+        raw = outputs[0].outputs[0].text.strip()
 
-            output = analyzer_model.analyse(image, prompt)
+        return {
+            "raw_output": raw
+        }
 
-            results.append({
-                "url": url,
-                "raw_output": output
-            })
-
-        except Exception as e:
-            results.append({
-                "url": url,
-                "error": str(e)
-            })
-
-    return {"results": results}
+    except Exception as e:
+        return {
+            "error": str(e)
+        }

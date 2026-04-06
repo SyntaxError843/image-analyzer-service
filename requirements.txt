@@ -1,6 +1,4 @@
 fastapi
 uvicorn[standard]
-transformers
-torch
-pillow
 requests
+vllm==0.17.1
